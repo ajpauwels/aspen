@@ -44,7 +44,7 @@ module.exports.create = (op) => {
 			} else {
 				op.history[execID].duringChild.addChild(finalChild);
 			}
-
+			
 			return op;
 		}
 
@@ -100,6 +100,7 @@ module.exports.create = (op) => {
 		if (!retryInterval) retryInterval = 1000;
 
 		if (op.preBeforeHook) await op.preBeforeHook(op.history[execID], op);
+		if (op.preBeforeExecOnlyHook) await op.preBeforeExecOnlyHook(op.history[execID], op);
 
 		if (op.beforeChild) {
 			op.history[execID].execBefore = true;
@@ -111,7 +112,9 @@ module.exports.create = (op) => {
 		}
 
 		if (op.postBeforeHook) await op.postBeforeHook(op.history[execID], op);
+		if (op.postBeforeExecOnlyHook) await op.postBeforeExecOnlyHook(op.history[execID], op);
 		if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
+		if (op.preDuringExecOnlyHook) await op.preDuringExecOnlyHook(op.history[execID], op);
 
 		if (execFunction && typeof(execFunction) === 'function') {
 			let succeeded = false;
@@ -124,7 +127,11 @@ module.exports.create = (op) => {
 				} catch (execErr) {
 					execResults.push(execErr);
 					await new Promise((resolv, reject) => {
-						setInterval(resolv, retryInterval);
+						const interval = setInterval(() => {
+							return resolv(interval);
+						}, retryInterval);
+					}).then((interval) => {
+						return clearInterval(interval);
 					});
 				}
 			}
@@ -140,7 +147,9 @@ module.exports.create = (op) => {
 		}
 
 		if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
+		if (op.postDuringExecOnlyHook) await op.postDuringExecOnlyHook(op.history[execID], op);
 		if (op.preAfterHook) await op.preAfterHook(op.history[execID], op);
+		if (op.preAfterExecOnlyHook) await op.preAfterExecOnlyHook(op.history[execID], op);
 
 		if (op.afterChild && typeof(op.afterChild) === 'object') {
 			op.history[execID].execAfter = true;
@@ -152,6 +161,7 @@ module.exports.create = (op) => {
 		}
 
 		if (op.postAfterHook) await op.postAfterHook(op.history[execID], op);
+		if (op.postAfterExecOnlyHook) await op.postAfterExecOnlyHook(op.history[execID], op);
 
 		op.inExecPhase = false;
 
@@ -190,12 +200,20 @@ module.exports.create = (op) => {
 
 		let results = [];
 		if (execID && op.history[execID].execAfter && op.afterChild && typeof(op.afterChild) === 'object') {
+			if (op.postAfterUndoOnlyHook) await op.postAfterUndoOnlyHook(op.history[execID], op);
+			if (op.postAfterHook) await op.postAfterHook(op.history[execID], op);
 			const afterResults = await op.afterChild.undo(numTries, retryInterval, execID).catch((err) => {
 				results = results.concat(err);
 				throw err;
 			});
 			results = results.concat(afterResults);
 		}
+
+		if (op.preAfterUndoOnlyHook) await op.preAfterUndoOnlyHook(op.history[execID], op);
+		if (op.preAfterHook) await op.preAfterHook(op.history[execID], op);
+		if (op.postDuringUndoOnlyHook) await op.postDuringUndoOnlyHook(op.history[execID], op);
+		if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
+
 		if (execID && op.history[execID].execDuring && undoFunction && typeof(undoFunction) === 'function') {
 			let succeeded = false;
 			const undoResults = [];
@@ -207,7 +225,11 @@ module.exports.create = (op) => {
 				} catch (undoErr) {
 					undoResults.push(undoErr);
 					await new Promise((resolv, reject) => {
-						setInterval(resolv, retryInterval);
+						const interval = setInterval(() => {
+							return resolv(interval);
+						}, retryInterval);
+					}).then((interval) => {
+						return clearInterval(interval);
 					});
 				}
 			}
@@ -218,6 +240,12 @@ module.exports.create = (op) => {
 				throw results;
 			}
 		}
+
+		if (op.preDuringUndoOnlyHook) await op.preDuringUndoOnlyHook(op.history[execID], op);
+		if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
+		if (op.postBeforeUndoOnlyHook) await op.postBeforeUndoOnlyHook(op.history[execID], op);
+		if (op.postBeforeHook) await op.postBeforeHook(op.history[execID], op);
+
 		if (execID && op.history[execID].execBefore && op.beforeChild && typeof(op.beforeChild) === 'object') {
 			const beforeResults = await op.beforeChild.undo(numTries, retryInterval, execID).catch((err) => {
 				results = results.concat(err);
@@ -225,6 +253,9 @@ module.exports.create = (op) => {
 			});
 			results = results.concat(beforeResults);
 		}
+
+		if (op.preBeforeUndoOnlyHook) await op.preBeforeUndoOnlyHook(op.history[execID], op);
+		if (op.preBeforeHook) await op.preBeforeHook(op.history[execID], op);
 
 		return results;
 	};

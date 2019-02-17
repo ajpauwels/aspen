@@ -1,22 +1,22 @@
 {
-  "name": "aspen",
-  "version": "0.0.1",
-  "description": "Framework for organizing operation sequences",
-  "main": "operation.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ajpauwels/aspen.git"
-  },
-  "author": "Alexandre Pauwels",
-  "license": "GPL-3.0-or-later",
-  "bugs": {
-    "url": "https://github.com/ajpauwels/aspen/issues"
-  },
-  "homepage": "https://github.com/ajpauwels/aspen#readme",
-  "dependencies": {
-    "uuid": "^3.3.2"
-  }
+	"name": "aspen",
+	"version": "0.0.1",
+	"description": "Framework for organizing operation sequences",
+	"main": "operation.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ajpauwels/aspen.git"
+	},
+	"author": "Alexandre Pauwels",
+	"license": "GPL-3.0-or-later",
+	"bugs": {
+		"url": "https://github.com/ajpauwels/aspen/issues"
+	},
+	"homepage": "https://github.com/ajpauwels/aspen#readme",
+	"dependencies": {
+		"uuid": "^3.3.2"
+	}
 }
