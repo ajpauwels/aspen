@@ -1,7 +1,8 @@
 const uuidv4 = require('uuid/v4');
 
-module.exports.create = (config) => {
-	const op = {};
+module.exports.create = (op) => {
+	const execFunction = op.exec;
+	const undoFunction = op.undo;
 
 	/**
 	 * Adds a child to the operation. This child will either be added as a before
@@ -36,11 +37,12 @@ module.exports.create = (config) => {
 		}
 
 		if (op.inExecPhase) {
-			if (!op.duringChild) {
-				op.duringChild = finalChild;
+			const execID = op.execID;
+			if (!op.history[execID].duringChild) {
+				op.history[execID].duringChild = finalChild;
 				finalChild.parent = op;
 			} else {
-				op.duringChild.addChild(finalChild);
+				op.history[execID].duringChild.addChild(finalChild);
 			}
 
 			return op;
@@ -78,58 +80,82 @@ module.exports.create = (config) => {
 		if (!execID) execID = uuidv4();
 		if (!op.inExecPhase) {
 			op.inExecPhase = true;
-			op.lastExecID = execID;
-			delete op.duringChild;
-			op.results = [];
+			op.execID = execID;
+			if (!op.history) op.history = {};
+			op.history[execID] = {
+				id: execID,
+				results: [],
+				numTries,
+				retryInterval
+			};
 		} else {
-			const duringChildExecResults = await op.duringChild.exec(numTries, retryInterval, execID).catch((err) => {
+			const duringChildExecResults = await op.history[execID].duringChild.exec(numTries, retryInterval, execID).catch((err) => {
 				return err;
 			});
-			op.results = op.results.concat(duringChildExecResults);
+			op.history[execID].results = op.history[execID].results.concat(duringChildExecResults);
 			return duringChildExecResults;
 		}
 
 		if (!numTries) numTries = 1;
 		if (!retryInterval) retryInterval = 1000;
 
+		if (op.preBeforeHook) await op.preBeforeHook(op.history[execID], op);
+
 		if (op.beforeChild) {
+			op.history[execID].execBefore = true;
 			const beforeResults = await op.beforeChild.exec(numTries, retryInterval, execID).catch((err) => {
-				op.results = op.results.concat(err);
-				throw op.results;
+				op.history[execID].results = op.history[execID].results.concat(err);
+				throw op.history[execID].results;
 			});
-			op.results = op.results.concat(beforeResults);
+			op.history[execID].results = op.history[execID].results.concat(beforeResults);
 		}
-		if (config.exec && typeof(config.exec) === 'function') {
+
+		if (op.postBeforeHook) await op.postBeforeHook(op.history[execID], op);
+		if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
+
+		if (execFunction && typeof(execFunction) === 'function') {
 			let succeeded = false;
 			const execResults = [];
-			for (let i = 0; i < numTries; ++i) {
+			for (let i = 0; i < numTries && !succeeded; ++i) {
 				try {
-					const execResult = await config.exec(numTries, retryInterval, execID);
+					const execResult = await execFunction(op.history[execID], op);
 					if (execResult) execResults.push(execResult);
 					succeeded = true;
 				} catch (execErr) {
 					execResults.push(execErr);
+					await new Promise((resolv, reject) => {
+						setInterval(resolv, retryInterval);
+					});
 				}
 			}
 
-			if (execResults.length > 0) op.results = op.results.concat(execResults);
+			if (execResults.length > 0) op.history[execID].results = op.history[execID].results.concat(execResults);
 
 			if (!succeeded) {
 				op.inExecPhase = false;
-				throw op.results;
+				throw op.history[execID].results;
+			} else {
+				op.history[execID].execDuring = true;
 			}
 		}
+
+		if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
+		if (op.preAfterHook) await op.preAfterHook(op.history[execID], op);
+
 		if (op.afterChild && typeof(op.afterChild) === 'object') {
+			op.history[execID].execAfter = true;
 			const afterResults = await op.afterChild.exec(numTries, retryInterval, execID).catch((err) => {
-				op.results = op.results.concat(err);
-				throw op.results;
+				op.history[execID].results = op.history[execID].results.concat(err);
+				throw op.history[execID].results;
 			});
-			op.results = op.results.concat(afterResults);
+			op.history[execID].results = op.history[execID].results.concat(afterResults);
 		}
+
+		if (op.postAfterHook) await op.postAfterHook(op.history[execID], op);
 
 		op.inExecPhase = false;
 
-		return op.results;
+		return op.history[execID].results;
 	};
 
 	/**
@@ -158,25 +184,44 @@ module.exports.create = (config) => {
 	op.undo = async (numTries, retryInterval, execID) => {
 		if (!numTries) numTries = 1;
 		if (!retryInterval) retryInterval = 1000;
-		if (!execID) execID = op.lastExecID;
+		if (!execID) execID = op.execID;
+
+		if (!op.history || !op.history[execID]) return [];
 
 		let results = [];
-		if (op.afterChild && typeof(op.afterChild) === 'object') {
+		if (execID && op.history[execID].execAfter && op.afterChild && typeof(op.afterChild) === 'object') {
 			const afterResults = await op.afterChild.undo(numTries, retryInterval, execID).catch((err) => {
-				return err;
+				results = results.concat(err);
+				throw err;
 			});
 			results = results.concat(afterResults);
 		}
-		if (execID !== op.lastExecID) return results;
-		if (config.undo && typeof(config.undo) === 'function') {
-			const undoResults = await config.undo(numTries, retryInterval, execID).catch((err) => {
-				return err;
-			});
-			results = results.concat(undoResults);
+		if (execID && op.history[execID].execDuring && undoFunction && typeof(undoFunction) === 'function') {
+			let succeeded = false;
+			const undoResults = [];
+			for (let i = 0; i < numTries && !succeeded; ++i) {
+				try {
+					const undoResult = await undoFunction(op.history[execID], op);
+					if (undoResult) undoResults.push(undoResult);
+					succeeded = true;
+				} catch (undoErr) {
+					undoResults.push(undoErr);
+					await new Promise((resolv, reject) => {
+						setInterval(resolv, retryInterval);
+					});
+				}
+			}
+
+			if (undoResults.length > 0) results = results.concat(undoResults);
+
+			if (!succeeded) {
+				throw results;
+			}
 		}
-		if (op.beforeChild) {
+		if (execID && op.history[execID].execBefore && op.beforeChild && typeof(op.beforeChild) === 'object') {
 			const beforeResults = await op.beforeChild.undo(numTries, retryInterval, execID).catch((err) => {
-				return err;
+				results = results.concat(err);
+				throw err;
 			});
 			results = results.concat(beforeResults);
 		}
@@ -209,13 +254,18 @@ module.exports.create = (config) => {
  */
 module.exports.prettyPrint = (resultArr) => {
 	let str = '';
-	for (const result of resultArr) {
-		if (result instanceof Error) {
-			str += result.stack;
-			str += '\n';
-		} else {
-			str += JSON.stringify(result, null, 2);
-			str += '\n';
+	if (resultArr instanceof Error) {
+		str = resultArr.stack + '\n';
+	}
+	else if (Array.isArray(resultArr)) {
+		for (const result of resultArr) {
+			if (result instanceof Error) {
+				str += result.stack;
+				str += '\n';
+			} else {
+				str += JSON.stringify(result, null, 2);
+				str += '\n';
+			}
 		}
 	}
 
