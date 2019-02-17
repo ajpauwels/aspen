@@ -1,4 +1,8 @@
+// Third-party libs
 const uuidv4 = require('uuid/v4');
+
+// Local libs
+const Util = require('./util');
 
 module.exports.create = (op) => {
 	const execFunction = op.exec;
@@ -113,30 +117,27 @@ module.exports.create = (op) => {
 
 		if (op.postBeforeHook) await op.postBeforeHook(op.history[execID], op);
 		if (op.postBeforeExecOnlyHook) await op.postBeforeExecOnlyHook(op.history[execID], op);
-		if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
-		if (op.preDuringExecOnlyHook) await op.preDuringExecOnlyHook(op.history[execID], op);
 
 		if (execFunction && typeof(execFunction) === 'function') {
 			let succeeded = false;
-			const execResults = [];
+			op.history[execID].execResults = [];
 			for (let i = 0; i < numTries && !succeeded; ++i) {
 				try {
+					if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
+					if (op.preDuringExecOnlyHook) await op.preDuringExecOnlyHook(op.history[execID], op);
 					const execResult = await execFunction(op.history[execID], op);
-					if (execResult) execResults.push(execResult);
+					if (execResult) op.history[execID].execResults.push(execResult);
 					succeeded = true;
 				} catch (execErr) {
-					execResults.push(execErr);
-					await new Promise((resolv, reject) => {
-						const interval = setInterval(() => {
-							return resolv(interval);
-						}, retryInterval);
-					}).then((interval) => {
-						return clearInterval(interval);
-					});
+					op.history[execID].execResults.push(execErr);
+					await Util.wait(retryInterval);
 				}
+
+				if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
+				if (op.postDuringExecOnlyHook) await op.postDuringExecOnlyHook(op.history[execID], op);
 			}
 
-			if (execResults.length > 0) op.history[execID].results = op.history[execID].results.concat(execResults);
+			if (op.history[execID].execResults.length > 0) op.history[execID].results = op.history[execID].results.concat(op.history[execID].execResults);
 
 			if (!succeeded) {
 				op.inExecPhase = false;
@@ -146,8 +147,6 @@ module.exports.create = (op) => {
 			}
 		}
 
-		if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
-		if (op.postDuringExecOnlyHook) await op.postDuringExecOnlyHook(op.history[execID], op);
 		if (op.preAfterHook) await op.preAfterHook(op.history[execID], op);
 		if (op.preAfterExecOnlyHook) await op.preAfterExecOnlyHook(op.history[execID], op);
 
@@ -204,54 +203,54 @@ module.exports.create = (op) => {
 			if (op.postAfterHook) await op.postAfterHook(op.history[execID], op);
 			const afterResults = await op.afterChild.undo(numTries, retryInterval, execID).catch((err) => {
 				results = results.concat(err);
-				throw err;
+				throw results;
 			});
 			results = results.concat(afterResults);
 		}
 
 		if (op.preAfterUndoOnlyHook) await op.preAfterUndoOnlyHook(op.history[execID], op);
 		if (op.preAfterHook) await op.preAfterHook(op.history[execID], op);
-		if (op.postDuringUndoOnlyHook) await op.postDuringUndoOnlyHook(op.history[execID], op);
-		if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
 
-		if (execID && op.history[execID].execDuring && undoFunction && typeof(undoFunction) === 'function') {
-			let succeeded = false;
-			const undoResults = [];
-			for (let i = 0; i < numTries && !succeeded; ++i) {
-				try {
-					const undoResult = await undoFunction(op.history[execID], op);
-					if (undoResult) undoResults.push(undoResult);
-					succeeded = true;
-				} catch (undoErr) {
-					undoResults.push(undoErr);
-					await new Promise((resolv, reject) => {
-						const interval = setInterval(() => {
-							return resolv(interval);
-						}, retryInterval);
-					}).then((interval) => {
-						return clearInterval(interval);
-					});
+		if (execID && op.history[execID].execDuring) {
+			if (op.postDuringUndoOnlyHook) await op.postDuringUndoOnlyHook(op.history[execID], op);
+			if (op.postDuringHook) await op.postDuringHook(op.history[execID], op);
+
+			if (undoFunction && typeof(undoFunction) === 'function') {
+				let succeeded = false;
+				const undoResults = [];
+				for (let i = 0; i < numTries && !succeeded; ++i) {
+					try {
+						const undoResult = await undoFunction(op.history[execID], op);
+						if (undoResult) undoResults.push(undoResult);
+						succeeded = true;
+					} catch (undoErr) {
+						undoResults.push(undoErr);
+						await Util.wait(retryInterval);
+					}
 				}
-			}
 
-			if (undoResults.length > 0) results = results.concat(undoResults);
+				if (undoResults.length > 0) results = results.concat(undoResults);
 
-			if (!succeeded) {
-				throw results;
+				if (op.preDuringUndoOnlyHook) await op.preDuringUndoOnlyHook(op.history[execID], op);
+				if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
+
+				if (!succeeded) {
+					throw results;
+				}
 			}
 		}
 
-		if (op.preDuringUndoOnlyHook) await op.preDuringUndoOnlyHook(op.history[execID], op);
-		if (op.preDuringHook) await op.preDuringHook(op.history[execID], op);
 		if (op.postBeforeUndoOnlyHook) await op.postBeforeUndoOnlyHook(op.history[execID], op);
 		if (op.postBeforeHook) await op.postBeforeHook(op.history[execID], op);
 
-		if (execID && op.history[execID].execBefore && op.beforeChild && typeof(op.beforeChild) === 'object') {
-			const beforeResults = await op.beforeChild.undo(numTries, retryInterval, execID).catch((err) => {
-				results = results.concat(err);
-				throw err;
-			});
-			results = results.concat(beforeResults);
+		if (execID && op.history[execID].execBefore) {
+			if (op.beforeChild && typeof(op.beforeChild) === 'object') {
+				const beforeResults = await op.beforeChild.undo(numTries, retryInterval, execID).catch((err) => {
+					results = results.concat(err);
+					throw results;
+				});
+				results = results.concat(beforeResults);
+			}
 		}
 
 		if (op.preBeforeUndoOnlyHook) await op.preBeforeUndoOnlyHook(op.history[execID], op);
