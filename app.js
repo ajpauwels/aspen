@@ -30,7 +30,7 @@ const Add1 = Operation({
 		return errorLogger(ctx.opUndoResults);
 	},
 	exec: async (num, ctx) => {
-		// if (someExternalValue === 15) throw new Error('Bad 15');
+		if (someExternalValue === 15) throw new Error('Bad 15');
 		ctx.oldVal = someExternalValue;
 		someExternalValue += num;
 		return {
@@ -38,7 +38,7 @@ const Add1 = Operation({
 		};
 	},
 	undo:  async (num, ctx) => {
-		if (ctx.oldVal === 2) throw new Error('Bad 2');
+		if (ctx.oldVal === 0) throw new Error('Bad 0');
 		someExternalValue = ctx.oldVal;
 		return {
 			restoredValue: someExternalValue
@@ -56,13 +56,15 @@ const add1_7 = Add1.create(7);
 const add1_8 = Add1.create(8);
 
 add1_4.addChild(add1_1, true).addChild(add1_2, true).addChild(add1_3, true).addChild(add1_5).addChild(add1_6).addChild(add1_7).addChild(add1_8);
-add1_1.exec(5, 1).then((execResults) => {
-	console.log(execResults);
+add1_4.exec(5, 1).then((execResults) => {
 	return execResults;
 }).catch((execResults) => {
-	return add1_1.undo(5, 1);
+	console.log(execResults);
+	return add1_4.undo(5, 1);
 }).then((undoResults) => {
+	console.log(undoResults);
 	return undoResults;
 }).catch((undoResults) => {	
+	console.log(undoResults);
 	return undoResults;
 });
