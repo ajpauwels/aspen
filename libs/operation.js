@@ -183,8 +183,8 @@ module.exports = (op) => {
 		 * @returns Promise with the results of the undo function
 		 */
 		opInstance.undoAll = (numTries, retryInterval) => {
-			if (op.parent && typeof(op.parent) === 'object') return op.parent.undoAll(numTries, retryInterval);
-			else return op.undo(numTries, retryInterval);
+			if (opInstance.parent && typeof(opInstance.parent) === 'object') return opInstance.parent.undoAll(numTries, retryInterval);
+			else return opInstance.undo(numTries, retryInterval);
 		};
 
 		/**
@@ -239,7 +239,7 @@ module.exports = (op) => {
 				ctx.retryInterval = retryInterval;
 			} else {
 				if (ctx.pendingDuringChild) {
-					const duringChildExecResults = await ctx.pendingDuringChild.exec(numTries, retryInterval);
+					const duringChildExecResults = await ctx.pendingDuringChild.exec(ctx.numTries, ctx.retryInterval);
 					ctx.execResults = ctx.execResults.concat(duringChildExecResults);
 					if (!ctx.duringChild) ctx.duringChild = this.auto().create();
 					if (!ctx.execDuring) ctx.duringChild.addChild(ctx.pendingDuringChild, true);
@@ -319,11 +319,11 @@ module.exports = (op) => {
 
 				ctx.phases.completedAfterChild = true;
 
-				op.executing = false;
+				ctx.executing = false;
 				return ctx.execResults;
 			} catch(err) {
 				ctx.execResults = ctx.execResults.concat(err);
-				op.executing = false;
+				ctx.executing = false;
 				throw ctx.execResults;
 			}
 		};
@@ -387,9 +387,10 @@ module.exports = (op) => {
 							if (op.preDuringTryHook) await op.preDuringTryHook(...ctx.params, ctx, opInstance);
 						}
 
-						if (ctx.opUndoResults.length > 0) ctx.undoResults = ctx.undoResults.concat(ctx.opUndoResults);
 						if (!ctx.phases.undoFunctionSucceeded) {
-							throw ctx.undoResults;
+							throw ctx.opUndoResults;
+						} else {
+							ctx.undoResults = ctx.undoResults.concat(ctx.opUndoResults);
 						}
 					}
 				}

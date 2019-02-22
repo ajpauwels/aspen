@@ -67,4 +67,17 @@ add1_4.exec(5, 1).then((execResults) => {
 }).catch((undoResults) => {	
 	console.log(undoResults);
 	return undoResults;
+}).then(() => {
+	return add1_4.exec(5, 1);
+}).then((execResults) => {
+	return execResults;
+}).catch((execResults) => {
+	console.log(execResults);
+	return add1_4.undo(5, 1);
+}).then((undoResults) => {
+	console.log(undoResults);
+	return undoResults;
+}).catch((undoResults) => {	
+	console.log(undoResults);
+	return undoResults;
 });
