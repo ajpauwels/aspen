@@ -8,10 +8,10 @@
  */
 module.exports.wait = (time) => {
 	return new Promise((resolv, reject) => {
-		const interval = setInterval(() => {
-			return resolv(interval);
+		const timeout = setTimeout(() => {
+			return resolv(timeout);
 		}, time);
-	}).then((interval) => {
-		return clearInterval(interval);
+	}).then((timeout) => {
+		return clearTimeout(timeout);
 	});
 };

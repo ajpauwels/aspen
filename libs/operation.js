@@ -101,7 +101,9 @@ module.exports = (op) => {
 					child.shift();
 					finalChild.addChild(child, false, noParallel);
 				} else {
-					finalChild = this.create(child);
+					// Have to put this here otherwise we get a circular dependency
+					const ParallelOperation = require('../operations/parallel');
+					finalChild = ParallelOperation.create(child);
 				}
 			}
 			else if (typeof(child) === 'object') {
@@ -252,13 +254,16 @@ module.exports = (op) => {
 
 					if (!ctx.duringChildren) ctx.duringChildren = {};
 					if (ctx.phases.completedExecFunction) {
+						console.log('1', ctx.phases.afterChildSucceeded);
 						if (!ctx.duringChildren.afterChild) ctx.duringChildren.afterChild = module.exports().create();
 						ctx.duringChildren.afterChild.addChild(ctx.pendingDuringChild, !ctx.phases.afterChildSucceeded);
 					}
 					else if (ctx.phases.completedBeforeChild) {
+						console.log('2', ctx.phases.execFunctionSucceeded);
 						if (!ctx.duringChildren.duringChild) ctx.duringChildren.duringChild = module.exports().create();
 						ctx.duringChildren.duringChild.addChild(ctx.pendingDuringChild, !ctx.phases.execFunctionSucceeded);
 					} else {
+						console.log('3', ctx.phases.beforeChildSucceeded);
 						if (!ctx.duringChildren.beforeChild) ctx.duringChildren.beforeChild = module.exports().create();
 						ctx.duringChildren.beforeChild.addChild(ctx.pendingDuringChild, !ctx.phases.beforeChildSucceeded);
 					}
@@ -349,7 +354,7 @@ module.exports = (op) => {
 					ctx.opResults = [];
 
 					for (let i = 0; i < numTries && !ctx.phases.execFunctionSucceeded; ++i) {
-						ctx.duringChildren = undefined;
+						if (ctx.duringChildren) ctx.duringChildren.duringChild = undefined;
 						ctx.phases.execFunctionAttempt = i;
 						if (op.preDuringTryHook) {
 							const hookResults = await op.preDuringTryHook(...ctx.params, ctx, opInstance);
@@ -532,6 +537,7 @@ module.exports = (op) => {
 				if (op.postDuringHook) await op.postDuringHook(...ctx.params, ctx, opInstance);
 
 				if (ctx.duringChildren && ctx.duringChildren.duringChild && ctx.duringChildren.duringChild.getContext().afterChild) {
+					console.log('should be in here 1');
 					const undoResults = await ctx.duringChildren.duringChild.getContext().afterChild.undo(ctx.numRetries, ctx.retryInterval);
 					if (undoResults) ctx.undoResults = ctx.undoResults.concat(undoResults);
 				}
@@ -565,6 +571,7 @@ module.exports = (op) => {
 				}
 
 				if (ctx.duringChildren && ctx.duringChildren.duringChild && ctx.duringChildren.duringChild.getContext().beforeChild) {
+					console.log('should be in here 2');
 					const undoResults = await ctx.duringChildren.duringChild.getContext().beforeChild.undo(ctx.numRetries, ctx.retryInterval);
 					if (undoResults) ctx.undoResults = ctx.undoResults.concat(undoResults);
 				}

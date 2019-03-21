@@ -32,11 +32,14 @@ const ComplexOperation = Operation({
 		op.addChild(add1_1, true);
 		await op.exec();
 
-		const parallelOp = ParallelOperation.create([add1_4, add1_5, add1_6]);
-		parallelOp.tag = 'PARALLEL';
-		op.addChild(parallelOp, true);
-		op.addChild(add1_7);
-		op.addChild(add1_8);
+		op.addChild(add1_4);
+		op.addChild(add1_5);
+		op.addChild(add1_6);
+		// const parallelOp = ParallelOperation.create([add1_4, add1_5, add1_6]);
+		// parallelOp.tag = 'PARALLEL';
+		// op.addChild(parallelOp, true);
+		// op.addChild(add1_7);
+		// op.addChild(add1_8);
 	}
 });
 
