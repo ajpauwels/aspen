@@ -44,7 +44,7 @@ module.exports = (op) => {
 	/**
 	 * Creates an execution handle into the operation.
 	 *
-	 * @params {Any} Takes any number of params, these will be handed
+	 * @param {Any} Takes any number of params, these will be handed
 	 *               to all operation-defined hook, exec, and undo functions
 	 * @returns {Object} Handle to the execution context
 	 */
@@ -241,21 +241,31 @@ module.exports = (op) => {
 				ctx.retryInterval = retryInterval;
 			} else {
 				if (ctx.pendingDuringChild) {
-					const duringChildExecResults = await ctx.pendingDuringChild.exec(ctx.numTries, ctx.retryInterval);
-					ctx.execResults = ctx.execResults.concat(duringChildExecResults);
+					let errOccurred;
+					const duringChildExecResults = await ctx.pendingDuringChild.exec(ctx.numTries, ctx.retryInterval).then((results) => {
+						ctx.execResults = ctx.execResults.concat(results);
+						return results;
+					}).catch((err) => {
+						errOccurred = true;
+						return err;
+					});
+
 					if (!ctx.duringChildren) ctx.duringChildren = {};
 					if (ctx.phases.completedExecFunction) {
 						if (!ctx.duringChildren.afterChild) ctx.duringChildren.afterChild = module.exports().create();
-						ctx.duringChildren.afterChild.addChild(ctx.pendingDuringChild, ctx.phases.afterChildSucceeded);
+						ctx.duringChildren.afterChild.addChild(ctx.pendingDuringChild, !ctx.phases.afterChildSucceeded);
 					}
 					else if (ctx.phases.completedBeforeChild) {
 						if (!ctx.duringChildren.duringChild) ctx.duringChildren.duringChild = module.exports().create();
-						ctx.duringChildren.afterChild.addChild(ctx.pendingDuringChild, ctx.phases.execFunctionSucceeded);
+						ctx.duringChildren.duringChild.addChild(ctx.pendingDuringChild, !ctx.phases.execFunctionSucceeded);
 					} else {
 						if (!ctx.duringChildren.beforeChild) ctx.duringChildren.beforeChild = module.exports().create();
-						ctx.duringChildren.beforeChild.addChild(ctx.pendingDuringChild, ctx.phases.beforeChildSucceeded);
+						ctx.duringChildren.beforeChild.addChild(ctx.pendingDuringChild, !ctx.phases.beforeChildSucceeded);
 					}
-					return duringChildExecResults;
+
+					ctx.pendingDuringChild = undefined;
+					if (errOccurred) throw duringChildExecResults;
+					else return duringChildExecResults;
 				} else {
 					return undefined;
 				}
@@ -267,8 +277,18 @@ module.exports = (op) => {
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
+				if (opInstance.preBeforeHook) {
+					const hookResults = await opInstance.preBeforeHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
 				if (op.preBeforeExecOnlyHook) {
 					const hookResults = await op.preBeforeExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
+				if (opInstance.preBeforeExecOnlyHook) {
+					const hookResults = await opInstance.preBeforeExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
@@ -286,8 +306,18 @@ module.exports = (op) => {
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
+				if (opInstance.postBeforeHook) {
+					const hookResults = await opInstance.postBeforeHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
 				if (op.postBeforeExecOnlyHook) {
 					const hookResults = await op.postBeforeExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
+				if (opInstance.postBeforeExecOnlyHook) {
+					const hookResults = await opInstance.postBeforeExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
@@ -299,8 +329,18 @@ module.exports = (op) => {
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
+				if (opInstance.preDuringHook) {
+					const hookResults = await opInstance.preDuringHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
 				if (op.preDuringExecOnlyHook) {
 					const hookResults = await op.preDuringExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+					await opInstance.exec();
+				}
+				if (opInstance.preDuringExecOnlyHook) {
+					const hookResults = await opInstance.preDuringExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 					await opInstance.exec();
 				}
@@ -309,14 +349,25 @@ module.exports = (op) => {
 					ctx.opResults = [];
 
 					for (let i = 0; i < numTries && !ctx.phases.execFunctionSucceeded; ++i) {
+						ctx.duringChildren = undefined;
 						ctx.phases.execFunctionAttempt = i;
 						if (op.preDuringTryHook) {
 							const hookResults = await op.preDuringTryHook(...ctx.params, ctx, opInstance);
 							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 							await opInstance.exec();
 						}
+						if (opInstance.preDuringTryHook) {
+							const hookResults = await opInstance.preDuringTryHook(...ctx.params, ctx, opInstance);
+							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+							await opInstance.exec();
+						}
 						if (op.preDuringTryExecOnlyHook) {
 							const hookResults = await op.preDuringTryExecOnlyHook(...ctx.params, ctx, opInstance);
+							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+							await opInstance.exec();
+						}
+						if (opInstance.preDuringTryExecOnlyHook) {
+							const hookResults = await opInstance.preDuringTryExecOnlyHook(...ctx.params, ctx, opInstance);
 							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 							await opInstance.exec();
 						}
@@ -337,8 +388,18 @@ module.exports = (op) => {
 							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 							await opInstance.exec();
 						}
+						if (opInstance.postDuringTryHook) {
+							const hookResults = await opInstance.postDuringTryHook(...ctx.params, ctx, opInstance);
+							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+							await opInstance.exec();
+						}
 						if (op.postDuringTryExecOnlyHook) {
 							const hookResults = await op.postDuringTryExecOnlyHook(...ctx.params, ctx, opInstance);
+							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+							await opInstance.exec();
+						}
+						if (opInstance.postDuringTryExecOnlyHook) {
+							const hookResults = await opInstance.postDuringTryExecOnlyHook(...ctx.params, ctx, opInstance);
 							if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 							await opInstance.exec();
 						}
@@ -355,8 +416,16 @@ module.exports = (op) => {
 					const hookResults = await op.postDuringHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
+				if (opInstance.postDuringHook) {
+					const hookResults = await opInstance.postDuringHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
 				if (op.postDuringExecOnlyHook) {
 					const hookResults = await op.postDuringExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
+				if (opInstance.postDuringExecOnlyHook) {
+					const hookResults = await opInstance.postDuringExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
 
@@ -366,8 +435,16 @@ module.exports = (op) => {
 					const hookResults = await op.preAfterHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
+				if (opInstance.preAfterHook) {
+					const hookResults = await opInstance.preAfterHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
 				if (op.preAfterExecOnlyHook) {
 					const hookResults = await op.preAfterExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
+				if (opInstance.preAfterExecOnlyHook) {
+					const hookResults = await opInstance.preAfterExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
 
@@ -382,8 +459,16 @@ module.exports = (op) => {
 					const hookResults = await op.postAfterHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
+				if (opInstance.postAfterHook) {
+					const hookResults = await opInstance.postAfterHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
 				if (op.postAfterExecOnlyHook) {
 					const hookResults = await op.postAfterExecOnlyHook(...ctx.params, ctx, opInstance);
+					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
+				}
+				if (opInstance.postAfterExecOnlyHook) {
+					const hookResults = await opInstance.postAfterExecOnlyHook(...ctx.params, ctx, opInstance);
 					if (hookResults) ctx.execResults = ctx.execResults.concat(hookResults);
 				}
 
@@ -446,7 +531,7 @@ module.exports = (op) => {
 				if (op.postDuringUndoOnlyHook) await op.postDuringUndoOnlyHook(...ctx.params, ctx, opInstance);
 				if (op.postDuringHook) await op.postDuringHook(...ctx.params, ctx, opInstance);
 
-				if (ctx.duringChildren && ctx.duringChildren.duringCHild && ctx.duringChildren.duringChild.getContext().afterChild) {
+				if (ctx.duringChildren && ctx.duringChildren.duringChild && ctx.duringChildren.duringChild.getContext().afterChild) {
 					const undoResults = await ctx.duringChildren.duringChild.getContext().afterChild.undo(ctx.numRetries, ctx.retryInterval);
 					if (undoResults) ctx.undoResults = ctx.undoResults.concat(undoResults);
 				}
@@ -458,7 +543,6 @@ module.exports = (op) => {
 							ctx.phases.undoFunctionAttempt = i;
 							if (op.postDuringTryUndoOnlyHook) await op.postDuringTryUndoOnlyHook(...ctx.params, ctx, opInstance);
 							if (op.postDuringTryHook) await op.postDuringTryHook(...ctx.params, ctx, opInstance);
-
 							try {
 								const undoResult = await undoFunction(...ctx.params, ctx, op);
 								if (undoResult) ctx.opUndoResults.push(undoResult);
@@ -490,9 +574,19 @@ module.exports = (op) => {
 				if (op.postBeforeUndoOnlyHook) await op.postBeforeUndoOnlyHook(...ctx.params, ctx, opInstance);
 				if (op.postBeforeHook) await op.postBeforeHook(...ctx.params, ctx, opInstance);
 
+				if (ctx.duringChildren && ctx.duringChildren.beforeChild && ctx.duringChildren.beforeChild.getContext().afterChild) {
+					const undoResults = await ctx.duringChildren.beforeChild.getContext().afterChild.undo(ctx.numRetries, ctx.retryInterval);
+					if (undoResults) ctx.undoResults = ctx.undoResults.concat(undoResults);
+				}
+
 				if (ctx.phases.beforeChildExecuted && ctx.beforeChild && typeof(ctx.beforeChild) === 'object') {
 					const beforeChildUndoResults = await ctx.beforeChild.undo(numTries, retryInterval);
 					ctx.undoResults = ctx.undoResults.concat(beforeChildUndoResults);
+				}
+
+				if (ctx.duringChildren && ctx.duringChildren.beforeChild && ctx.duringChildren.beforeChild.getContext().beforeChild) {
+					const undoResults = await ctx.duringChildren.beforeChild.getContext().beforeChild.undo(ctx.numRetries, ctx.retryInterval);
+					if (undoResults) ctx.undoResults = ctx.undoResults.concat(undoResults);
 				}
 
 				if (op.preBeforeUndoOnlyHook) await op.preBeforeUndoOnlyHook(...ctx.params, ctx, opInstance);

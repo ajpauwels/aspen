@@ -33,6 +33,7 @@ const ComplexOperation = Operation({
 		await op.exec();
 
 		const parallelOp = ParallelOperation.create([add1_4, add1_5, add1_6]);
+		parallelOp.tag = 'PARALLEL';
 		op.addChild(parallelOp, true);
 		op.addChild(add1_7);
 		op.addChild(add1_8);
@@ -53,7 +54,7 @@ const AddOperation = Operation({
 		return errorLogger(ctx.opUndoResults);
 	},
 	exec: async (num, ctx) => {
-		if (someExternalValue === 15) throw new Error('Bad 15');
+		if (someExternalValue + num >= 16) throw new Error(`Bad ${someExternalValue + num}`);
 		ctx.oldVal = someExternalValue;
 		someExternalValue += num;
 		return {

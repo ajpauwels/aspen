@@ -37,7 +37,8 @@ module.exports = Operation({
 
 		const undoPromises = [];
 		let errorOccurred = false;
-		for (const op of opArr) {
+		for (let i = opArr.length - 1; i >= 0; --i) {
+			const op = opArr[i];
 			undoPromises.push(op.undo(ctx.numTries, ctx.retryInterval).catch((err) => {
 				errorOccurred = true;
 				return err;
